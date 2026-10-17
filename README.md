@@ -27,6 +27,16 @@ The workflow analyzes incoming customer support emails, generates a concise issu
 
 Gmail Trigger → Get Email Message → Edit Fields → Claude AI Classification → JavaScript Processing → IF Condition → Google Sheets
 
+## Workflow Overview
+
+![AI-powered customer support email classification workflow](screenshots/workflow-overview.png)
+
+## Workflow Export
+
+The sanitized n8n workflow export is available in [`customer-support-workflow-sanitized.json`](customer-support-workflow-sanitized.json).
+
+Importing this workflow requires configuring your own service credentials and Google Sheets connection.
+
 ### Workflow Steps
 
 1. **Email Trigger:** Detects incoming emails through Gmail.
