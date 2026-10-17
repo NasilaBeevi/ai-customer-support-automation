@@ -1,0 +1,567 @@
+{
+  "name": "AI Customer Support Email Classification and Routing",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "dfaf786b-b8f8-450a-b23a-27120efb5af9",
+      "name": "When clicking ‘Execute workflow’",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4fdb5c5b-b5a2-449e-ba8b-0e5056714b9a",
+              "name": "email_message",
+              "value": "={{ $json.snippet }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b32fd6c-9f93-4036-b308-d0e8d70ac1a6",
+      "name": "Edit Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a customer support email classification assistant.\n\nAnalyse the customer email below:\n\n{{ $json.email_message }}\n\nReturn only a valid JSON object with these five fields:\n- \"issue_summary\": a short summary of the problem\n- \"suggested_department\": one of \"Delivery\", \"Billing\", \"Technical Support\", or \"General Support\"\n- \"order_number\": the order number provided in the email, or null if missing\n- \"human_review_required\": true or false\n- \"review_reason\": explain why human review is needed, or an empty string if it is not needed\n\nRules:\n1. Never invent missing information.\n2. If the order number is missing for a delivery issue, set human_review_required to true.\n3. If the issue is unclear, set human_review_required to true.\n4. Otherwise, set human_review_required to false.\n5. Return JSON only, with no Markdown code fences or extra commentary.",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "id": "27f78fd1-aa4f-4beb-a06d-56f14cfb4bbf",
+      "name": "Basic LLM Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "id": "387c5d2a-9633-445b-bcc2-56a6e006061e",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        384,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst results = [];\n\nfor (const item of $input.all()) {\n  const raw = item.json.text;\n\n  if (typeof raw !== 'string') {\n    throw new Error('Expected AI output in the text field.');\n  }\n\n  // Remove optional Markdown code fences\n  const cleaned = raw\n    .trim()\n    .replace(/^```(?:json)?\\s*/i, '')\n    .replace(/\\s*```$/, '');\n\n  let parsed;\n\n  try {\n    parsed = JSON.parse(cleaned);\n  } catch (error) {\n    throw new Error(\n      'AI output is not valid JSON. Actual output: ' + raw\n    );\n  }\n\n  const requiredFields = [\n    'issue_summary',\n    'suggested_department',\n    'order_number',\n    'human_review_required',\n    'review_reason'\n  ];\n\n  for (const field of requiredFields) {\n    if (!(field in parsed)) {\n      throw new Error(`Missing required field: ${field}`);\n    }\n  }\n\n  if (typeof parsed.human_review_required !== 'boolean') {\n    throw new Error('human_review_required must be true or false.');\n  }\n\n  results.push({\n    json: {\n      issue_summary: parsed.issue_summary,\n      suggested_department: parsed.suggested_department,\n      order_number: parsed.order_number,\n      human_review_required: parsed.human_review_required,\n      review_reason: parsed.review_reason\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "id": "bf86284b-24e6-4d2e-bc40-91adedb1be6b",
+      "name": "Code in JavaScript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "cb17eac9-fade-4953-9366-2dd7f2b354e0",
+              "leftValue": "={{ $json.human_review_required }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ede4c97c-759b-49e9-ba0f-9d76fd95553f",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        816,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7a81722a-8589-452e-8a66-8eb3384679ac",
+              "name": "processing_status",
+              "value": "Needs Human Review",
+              "type": "string"
+            },
+            {
+              "id": "865d9656-1408-4925-b18e-2ae1b98ed6e5",
+              "name": "review_reason",
+              "value": "={{ $json.review_reason }}",
+              "type": "string"
+            },
+            {
+              "id": "92e89e41-2a3b-4774-b417-cacd821da943",
+              "name": "suggested_department",
+              "value": "={{ $json.suggested_department }}",
+              "type": "string"
+            },
+            {
+              "id": "e4ec6549-3f1d-444e-aab5-d1c74b2c62c2",
+              "name": "issue_summary",
+              "value": "={{ $json.issue_summary }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ee0cf05b-d56e-4ea5-bde2-199a89d176d6",
+      "name": "Edit Fields1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1040,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_GOOGLE_SHEET_NAME",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "issue_summary": "={{ $json.issue_summary }}",
+            "suggested_department": "={{ $json.suggested_department }}",
+            "order_number": "={{ $('Code in JavaScript').item.json.order_number }}",
+            "human_review_required": "={{ $('Code in JavaScript').item.json.human_review_required }}",
+            "review_reason": "={{ $json.review_reason }}",
+            "processing_status": "={{ $json.processing_status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "issue_summary",
+              "displayName": "issue_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "suggested_department",
+              "displayName": "suggested_department",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "human_review_required",
+              "displayName": "human_review_required",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "review_reason",
+              "displayName": "review_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "2d3f4765-d14d-4f31-a5a1-6cae582ec5aa",
+      "name": "Append row in sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1264,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a6c27614-ecc2-49ad-a2c4-d2ca098b1d8b",
+              "name": "processing_status",
+              "value": "Ready for Processing",
+              "type": "string"
+            },
+            {
+              "id": "1b6f70d9-74f8-47d0-83b7-3ee22608d81f",
+              "name": "suggested_department",
+              "value": "={{ $json.suggested_department }}",
+              "type": "string"
+            },
+            {
+              "id": "1f7e168f-018b-45b5-8be1-0116111f42fe",
+              "name": "issue_summary",
+              "value": "={{ $json.issue_summary }}",
+              "type": "string"
+            },
+            {
+              "id": "17e663c6-643f-4517-a488-b9263a53019e",
+              "name": "order_number",
+              "value": "={{ $json.order_number }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "826b10ad-eec7-4cd8-a05c-1fb42b1baf33",
+      "name": "Edit Fields2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1232,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_GOOGLE_SHEET_NAME",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "processing_status": "=Ready for Processing",
+            "review_reason": "={{ $('Code in JavaScript').item.json.review_reason }}",
+            "human_review_required": "={{ $('Code in JavaScript').item.json.human_review_required }}",
+            "order_number": "={{ $json.order_number }}",
+            "suggested_department": "={{ $json.suggested_department }}",
+            "issue_summary": "={{ $json.issue_summary }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "issue_summary",
+              "displayName": "issue_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_department",
+              "displayName": "suggested_department",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "human_review_required",
+              "displayName": "human_review_required",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review_reason",
+              "displayName": "review_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "41951770-7630-43ec-883f-50711edfde54",
+      "name": "Append row in sheet1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1456,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "id": "9c43f9ac-8d6e-45ae-b22c-7ea23000fe1d",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        592,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}"
+      },
+      "id": "9ff3c223-0234-4a23-880a-35ab78de8df5",
+      "name": "Get a message",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        816,
+        144
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a message": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "meta": {},
+  "nodeGroups": [],
+  "tags": []
+}
